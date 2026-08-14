@@ -1,81 +1,47 @@
 import requests
 import pandas as pd
 
-BASE_URL = "https://api.bybit.com"
+BASE_URL = "https://www.okx.com"
 
+BAR_MAP = {
+    "5m": "5m",
+    "15m": "15m",
+    "1h": "1H",
+    "4h": "4H"
+}
 
-def get_klines(symbol="BTCUSDT", interval="15m", limit=500):
+def get_klines(symbol="BTCUSDT", interval="15m", limit=300):
+    inst_id = symbol.replace("USDT", "-USDT-SWAP")
+    bar = BAR_MAP[interval]
 
-    interval_map = {
-        "5m": "5",
-        "15m": "15",
-        "1h": "60",
-        "4h": "240"
-    }
-
-    if interval not in interval_map:
-        raise ValueError(f"Unsupported interval: {interval}")
-
-    url = f"{BASE_URL}/v5/market/kline"
-
+    url = f"{BASE_URL}/api/v5/market/candles"
     params = {
-        "category": "linear",
-        "symbol": symbol,
-        "interval": interval_map[interval],
+        "instId": inst_id,
+        "bar": bar,
         "limit": limit
     }
 
-    response = requests.get(
-        url,
-        params=params,
-        timeout=20,
-        headers={
-            "User-Agent": "Mozilla/5.0"
-        }
+    r = requests.get(url, params=params, timeout=20)
+    r.raise_for_status()
+
+    data = r.json()
+
+    if data.get("code") != "0":
+        raise Exception(f"OKX API Error: {data.get('msg')}")
+
+    candles = data["data"]
+
+    df = pd.DataFrame(candles, columns=[
+        "open_time", "open", "high", "low", "close",
+        "volume", "volCcy", "volCcyQuote", "confirm"
+    ])
+
+    df[["open", "high", "low", "close", "volume"]] = (
+        df[["open", "high", "low", "close", "volume"]].astype(float)
     )
 
-    response.raise_for_status()
+    df["open_time"] = pd.to_datetime(df["open_time"].astype("int64"), unit="ms")
 
-    result = response.json()
-
-    if result.get("retCode") != 0:
-        raise RuntimeError(
-            f"Bybit API error: {result.get('retMsg')}"
-        )
-
-    data = result["result"]["list"]
-
-    if not data:
-        raise ValueError(
-            f"No kline data returned for {symbol} {interval}"
-        )
-
-    df = pd.DataFrame(
-        data,
-        columns=[
-            "open_time",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume",
-            "turnover"
-        ]
-    )
-
-    df[
-        ["open", "high", "low", "close", "volume", "turnover"]
-    ] = df[
-        ["open", "high", "low", "close", "volume", "turnover"]
-    ].astype(float)
-
-    df["open_time"] = pd.to_datetime(
-        df["open_time"].astype("int64"),
-        unit="ms"
-    )
-
-    # Bybit returns newest candle first.
-    # Reverse it so the DataFrame is oldest -> newest.
     df = df.iloc[::-1].reset_index(drop=True)
 
     return df
