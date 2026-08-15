@@ -9,8 +9,13 @@ from indicators import (
     ema
 )
 
+
 def last_closed(df):
+    """
+    آخرین کندل در حال تشکیل را حذف می‌کند
+    """
     return df.iloc[:-1].copy()
+
 
 class SumoStrategy:
 
@@ -34,71 +39,92 @@ class SumoStrategy:
 
         ema50 = ema(btc_df["close"], 50)
 
+        if pd.isna(ema50.iloc[-1]):
+            return True
+
         return btc_df["close"].iloc[-1] > ema50.iloc[-1]
 
     # =====================================================
-    # Trendline Breakout Logic
+    # Trendline Breakout
     # =====================================================
-   def trendline_breakout(self, df):
+    def trendline_breakout(self, df):
 
-    ph = pivot_high(
-        df["high"],
-        self.swing_length,
-        self.swing_length
-    )
+        ph = pivot_high(
+            df["high"],
+            self.swing_length,
+            self.swing_length
+        )
 
-    pl = pivot_low(
-        df["low"],
-        self.swing_length,
-        self.swing_length
-    )
+        pl = pivot_low(
+            df["low"],
+            self.swing_length,
+            self.swing_length
+        )
 
-    slope = trendline_slope(
-        df,
-        self.swing_length,
-        self.slope_mult
-    )
+        slope = trendline_slope(
+            df,
+            self.swing_length,
+            self.slope_mult
+        )
 
-    upper = np.nan
-    lower = np.nan
+        upper = np.nan
+        lower = np.nan
 
-    upper_series = []
-    lower_series = []
+        upper_series = []
+        lower_series = []
 
-    for i in range(len(df)):
+        for i in range(len(df)):
 
-        if not np.isnan(ph.iloc[i]):
-            upper = ph.iloc[i]
-        elif not np.isnan(upper):
-            upper -= slope.iloc[i]
+            if not np.isnan(ph.iloc[i]):
+                upper = ph.iloc[i]
+            elif not np.isnan(upper):
+                upper -= slope.iloc[i]
 
-        if not np.isnan(pl.iloc[i]):
-            lower = pl.iloc[i]
-        elif not np.isnan(lower):
-            lower += slope.iloc[i]
+            if not np.isnan(pl.iloc[i]):
+                lower = pl.iloc[i]
+            elif not np.isnan(lower):
+                lower += slope.iloc[i]
 
-        upper_series.append(upper)
-        lower_series.append(lower)
+            upper_series.append(upper)
+            lower_series.append(lower)
 
-    upper_series = pd.Series(upper_series, index=df.index)
-    lower_series = pd.Series(lower_series, index=df.index)
+        upper_series = pd.Series(
+            upper_series,
+            index=df.index
+        )
 
-    upper_break = (
-        df["close"].iloc[-2] <= upper_series.iloc[-2]
-        and
-        df["close"].iloc[-1] > upper_series.iloc[-1]
-    )
+        lower_series = pd.Series(
+            lower_series,
+            index=df.index
+        )
 
-    lower_break = (
-        df["close"].iloc[-2] >= lower_series.iloc[-2]
-        and
-        df["close"].iloc[-1] < lower_series.iloc[-1]
-    )
+        if len(df) < 2:
+            return False, False
 
-    return upper_break, lower_break
+        upper_break = (
+            not np.isnan(upper_series.iloc[-2])
+            and
+            not np.isnan(upper_series.iloc[-1])
+            and
+            df["close"].iloc[-2] <= upper_series.iloc[-2]
+            and
+            df["close"].iloc[-1] > upper_series.iloc[-1]
+        )
+
+        lower_break = (
+            not np.isnan(lower_series.iloc[-2])
+            and
+            not np.isnan(lower_series.iloc[-1])
+            and
+            df["close"].iloc[-2] >= lower_series.iloc[-2]
+            and
+            df["close"].iloc[-1] < lower_series.iloc[-1]
+        )
+
+        return upper_break, lower_break
 
     # =====================================================
-    # DMO Filter
+    # DMO Momentum
     # =====================================================
     def momentum_filter(self, df):
 
@@ -125,6 +151,15 @@ class SumoStrategy:
         df,
         btc_df=None
     ):
+
+        # فقط کندل بسته شده
+        df = last_closed(df)
+
+        if btc_df is not None:
+            btc_df = last_closed(btc_df)
+
+        if len(df) < 100:
+            return None
 
         upper_break, lower_break = self.trendline_breakout(df)
 
