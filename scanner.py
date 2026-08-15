@@ -29,11 +29,15 @@ def save_state(state):
 
 state = load_state()
 
+# کش BTC
+btc_cache = {}
+
 
 def scan_symbol(symbol, timeframe):
     try:
         df = get_klines(symbol, timeframe, 200)
-        btc_df = get_klines("BTCUSDT", timeframe, 200)
+
+        btc_df = btc_cache[timeframe]
 
         signal = strategy.generate_signal(df, btc_df)
 
@@ -42,7 +46,6 @@ def scan_symbol(symbol, timeframe):
             current_signal = signal["signal"]
             previous_signal = state.get(key)
 
-            # فقط اگر سیگنال تغییر کرده باشد
             if previous_signal != current_signal:
                 telegram.send_signal(
                     symbol=symbol,
@@ -61,7 +64,13 @@ def scan_symbol(symbol, timeframe):
 
 
 def run_scanner():
-    with ThreadPoolExecutor(max_workers=3) as executor:
+
+    # فقط یک بار BTC را برای هر تایم‌فریم دانلود کن
+    for tf in TIMEFRAMES:
+        btc_cache[tf] = get_klines("BTCUSDT", tf, 200)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+
         futures = []
 
         for symbol in SYMBOLS:
