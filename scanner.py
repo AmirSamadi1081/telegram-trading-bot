@@ -3,27 +3,58 @@ from data import get_klines
 from strategy import SumoStrategy
 from telegram_sender import TelegramSender
 from config import SYMBOLS, TIMEFRAMES
+import json
+import os
 
 strategy = SumoStrategy()
 telegram = TelegramSender()
 
+STATE_FILE = "state.json"
+
+
+def load_state():
+    if not os.path.exists(STATE_FILE):
+        return {}
+    try:
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
+state = load_state()
+
 
 def scan_symbol(symbol, timeframe):
     try:
-        df = get_klines(symbol, timeframe, 500)
-        btc_df = get_klines("BTCUSDT", timeframe, 500)
+        df = get_klines(symbol, timeframe, 200)
+        btc_df = get_klines("BTCUSDT", timeframe, 200)
 
         signal = strategy.generate_signal(df, btc_df)
 
         if signal:
-            telegram.send_signal(
-                symbol=symbol,
-                timeframe=timeframe,
-                signal=signal["signal"],
-                price=signal["price"]
-            )
+            key = f"{symbol}_{timeframe}"
+            current_signal = signal["signal"]
+            previous_signal = state.get(key)
 
-            print(f"{symbol} {timeframe} - {signal}")
+            # فقط اگر سیگنال تغییر کرده باشد
+            if previous_signal != current_signal:
+                telegram.send_signal(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    signal=current_signal,
+                    price=signal["price"]
+                )
+
+                state[key] = current_signal
+                save_state(state)
+
+                print(f"NEW SIGNAL {symbol} {timeframe} - {signal}")
 
     except Exception as e:
         print(f"Error {symbol} {timeframe}: {e}")
