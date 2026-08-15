@@ -24,24 +24,30 @@ class SumoStrategy:
         self.dmo_length = dmo_length
         self.threshold = threshold
 
-    # =========================================================
+    # =====================================================
     # آخرین کندل بسته شده
-    # =========================================================
-    def last_closed(self, df):
-        if df is None or len(df) < 3:
-            return df
+    # =====================================================
+    def closed_df(self, df):
 
-        return df.iloc[:-1].copy()
-
-    # =========================================================
-    # BTC Trend Filter
-    # =========================================================
-    def btc_trend(self, btc_df):
-
-        if btc_df is None or len(btc_df) < 60:
+        if df is None or len(df) < 50:
             return None
 
-        btc_df = self.last_closed(btc_df)
+        result = df.iloc[:-1].copy()
+
+        if len(result) < 50:
+            return None
+
+        return result
+
+    # =====================================================
+    # روند BTC
+    # =====================================================
+    def btc_trend(self, btc_df):
+
+        btc_df = self.closed_df(btc_df)
+
+        if btc_df is None:
+            return None
 
         ema50 = ema(btc_df["close"], 50)
 
@@ -59,15 +65,13 @@ class SumoStrategy:
 
         return None
 
-    # =========================================================
+    # =====================================================
     # Trendline Breakout
-    # =========================================================
+    # =====================================================
     def trendline_breakout(self, df):
 
         if df is None or len(df) < self.swing_length * 3:
             return False, False
-
-        df = self.last_closed(df)
 
         ph = pivot_high(
             df["high"],
@@ -95,55 +99,64 @@ class SumoStrategy:
 
         for i in range(len(df)):
 
-            # -------------------------
+            current_ph = ph.iloc[i]
+            current_pl = pl.iloc[i]
+            current_slope = slope.iloc[i]
+
+            if pd.isna(current_slope):
+                continue
+
+            # -----------------------------
             # Upper trendline
-            # -------------------------
-            if not np.isnan(ph.iloc[i]):
-                upper = ph.iloc[i]
+            # -----------------------------
+            if not pd.isna(current_ph):
 
-            elif not np.isnan(upper):
-                if not np.isnan(slope.iloc[i]):
-                    upper -= slope.iloc[i]
+                upper = float(current_ph)
 
-            # -------------------------
+            elif not pd.isna(upper):
+
+                upper -= float(current_slope)
+
+            # -----------------------------
             # Lower trendline
-            # -------------------------
-            if not np.isnan(pl.iloc[i]):
-                lower = pl.iloc[i]
+            # -----------------------------
+            if not pd.isna(current_pl):
 
-            elif not np.isnan(lower):
-                if not np.isnan(slope.iloc[i]):
-                    lower += slope.iloc[i]
+                lower = float(current_pl)
 
-            # -------------------------
-            # Breakouts
-            # -------------------------
-            if not np.isnan(upper):
+            elif not pd.isna(lower):
 
-                if df["close"].iloc[i] > upper:
+                lower += float(current_slope)
+
+            close = float(df["close"].iloc[i])
+
+            # -----------------------------
+            # Breakout
+            # -----------------------------
+            if not pd.isna(upper):
+
+                if close > upper:
                     upper_break = True
 
-            if not np.isnan(lower):
+            if not pd.isna(lower):
 
-                if df["close"].iloc[i] < lower:
+                if close < lower:
                     lower_break = True
 
         return upper_break, lower_break
 
-    # =========================================================
-    # DMO Momentum Filter
-    # =========================================================
+    # =====================================================
+    # Momentum / DMO
+    # =====================================================
     def momentum_filter(self, df):
 
-        if df is None or len(df) < self.dmo_length + 5:
+        if df is None or len(df) < self.dmo_length + 10:
             return None
 
-        df = self.last_closed(df)
-
-        d = dmo(
-            df,
-            self.dmo_length
-        )
+        try:
+            d = dmo(df, self.dmo_length)
+        except Exception:
+            return None
 
         if d is None or len(d) == 0:
             return None
@@ -153,6 +166,8 @@ class SumoStrategy:
         if pd.isna(last):
             return None
 
+        last = float(last)
+
         if last > self.threshold:
             return "BULLISH"
 
@@ -161,94 +176,169 @@ class SumoStrategy:
 
         return None
 
-    # =========================================================
+    # =====================================================
+    # قدرت حرکت
+    # =====================================================
+    def momentum_strength(self, df):
+
+        if df is None or len(df) < self.dmo_length + 10:
+            return 0.0
+
+        try:
+            d = dmo(df, self.dmo_length)
+        except Exception:
+            return 0.0
+
+        if d is None or len(d) < 2:
+            return 0.0
+
+        value = d.iloc[-1]
+
+        if pd.isna(value):
+            return 0.0
+
+        return abs(float(value))
+
+    # =====================================================
+    # بررسی حجم
+    # =====================================================
+    def volume_filter(self, df):
+
+        if df is None or len(df) < 25:
+            return None
+
+        if "volume" not in df.columns:
+            return True
+
+        volume = pd.to_numeric(
+            df["volume"],
+            errors="coerce"
+        )
+
+        if volume.isna().all():
+            return True
+
+        current_volume = volume.iloc[-1]
+
+        average_volume = volume.iloc[-21:-1].mean()
+
+        if pd.isna(current_volume) or pd.isna(average_volume):
+            return True
+
+        # حجم خیلی پایین = سیگنال ضعیف
+        if current_volume < average_volume * 0.5:
+            return False
+
+        return True
+
+    # =====================================================
     # Main Signal
-    # =========================================================
+    # =====================================================
     def generate_signal(
         self,
         df,
         btc_df=None
     ):
 
-        if df is None or len(df) < 50:
+        # -------------------------------------------------
+        # حذف کندل در حال تشکیل
+        # -------------------------------------------------
+        df = self.closed_df(df)
+
+        if df is None:
             return None
 
-        # فقط کندل بسته شده
-        closed_df = self.last_closed(df)
+        # -------------------------------------------------
+        # Breakout
+        # -------------------------------------------------
+        upper_break, lower_break = self.trendline_breakout(df)
 
-        if closed_df is None or len(closed_df) < 50:
-            return None
-
-        # -------------------------
-        # Trendline
-        # -------------------------
-        upper_break, lower_break = self.trendline_breakout(
-            closed_df
-        )
-
-        # -------------------------
+        # -------------------------------------------------
         # Momentum
-        # -------------------------
-        momentum = self.momentum_filter(
-            closed_df
-        )
+        # -------------------------------------------------
+        momentum = self.momentum_filter(df)
 
-        # -------------------------
+        if momentum is None:
+            return None
+
+        # -------------------------------------------------
+        # Momentum Strength
+        # -------------------------------------------------
+        strength = self.momentum_strength(df)
+
+        if strength < self.threshold:
+            return None
+
+        # -------------------------------------------------
+        # Volume
+        # -------------------------------------------------
+        volume_ok = self.volume_filter(df)
+
+        if volume_ok is False:
+            return None
+
+        # -------------------------------------------------
         # BTC Filter
-        # -------------------------
-        btc_state = "BULLISH"
+        # -------------------------------------------------
+        btc_trend = None
 
         if btc_df is not None:
+            btc_trend = self.btc_trend(btc_df)
 
-            btc_state = self.btc_trend(
-                btc_df
-            )
+        # -------------------------------------------------
+        # قیمت آخرین کندل بسته شده
+        # -------------------------------------------------
+        price = float(df["close"].iloc[-1])
 
-            if btc_state is None:
-                return None
-
-        # -------------------------
-        # Current price
-        # -------------------------
-        price = float(
-            closed_df["close"].iloc[-1]
-        )
-
-        # =====================================================
+        # =================================================
         # BUY
-        # =====================================================
-        #
-        # شکست صعودی
-        # مومنتوم صعودی
-        # BTC صعودی
-        #
-        # =====================================================
+        # =================================================
+        if upper_break and momentum == "BULLISH":
 
-        if (
-            upper_break
-            and momentum == "BULLISH"
-            and btc_state == "BULLISH"
-        ):
+            # اگر BTC اطلاعات معتبر دارد،
+            # برای BUY بهتر است BTC صعودی باشد.
+            if btc_trend is not None:
+
+                if btc_trend != "BULLISH":
+                    return None
 
             return {
                 "signal": "BUY",
                 "price": price
             }
 
-        # =====================================================
+        # =================================================
         # SELL
-        # =====================================================
-        #
-        # شکست نزولی
-        # مومنتوم نزولی
-        #
-        # برای SELL فیلتر BTC اجباری نیست
-        # =====================================================
+        # =================================================
+        if lower_break and momentum == "BEARISH":
 
-        if (
-            lower_break
-            and momentum == "BEARISH"
-        ):
+            # برای SELL لازم نیست BTC حتماً نزولی باشد،
+            # ولی اگر BTC صعودی شدید باشد، سیگنال حذف می‌شود.
+            if btc_trend == "BULLISH":
+
+                btc_df_closed = self.closed_df(btc_df)
+
+                if btc_df_closed is not None:
+
+                    btc_ema = ema(
+                        btc_df_closed["close"],
+                        50
+                    )
+
+                    if not pd.isna(btc_ema.iloc[-1]):
+
+                        btc_close = float(
+                            btc_df_closed["close"].iloc[-1]
+                        )
+
+                        btc_ema_value = float(
+                            btc_ema.iloc[-1]
+                        )
+
+                        # BTC بالاتر از EMA50 است،
+                        # بنابراین SELL ضعیف‌تر است.
+                        if btc_close > btc_ema_value * 1.01:
+                            return None
 
             return {
                 "signal": "SELL",
