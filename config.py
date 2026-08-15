@@ -35,7 +35,6 @@ SYMBOLS = [
     "LINKUSDT",
     "AVAXUSDT",
     "SUIUSDT",
-    "TONUSDT",
     "TRXUSDT",
     "DOTUSDT",
     "LTCUSDT",
