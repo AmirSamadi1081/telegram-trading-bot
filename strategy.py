@@ -146,20 +146,14 @@ class SumoStrategy:
     # =====================================================
     # Main Signal
     # =====================================================
-    def generate_signal(
-        self,
-        df,
-        btc_df=None
-    ):
+   def generate_signal(
+    self,
+    df,
+    btc_df=None
+):
 
-        # فقط کندل بسته شده
-        df = last_closed(df)
-
-        if btc_df is not None:
-            btc_df = last_closed(btc_df)
-
-        if len(df) < 100:
-            return None
+    if len(df) < 100:
+        return None
 
         upper_break, lower_break = self.trendline_breakout(df)
 
