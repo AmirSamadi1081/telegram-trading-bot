@@ -41,6 +41,8 @@ def scan_symbol(symbol, timeframe):
 
         signal = strategy.generate_signal(df, btc_df)
 
+        print(f"SCAN {symbol} {timeframe} -> {signal}")
+        
         if signal:
             key = f"{symbol}_{timeframe}"
             current_signal = signal["signal"]
