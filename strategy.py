@@ -9,6 +9,8 @@ from indicators import (
     ema
 )
 
+def last_closed(df):
+    return df.iloc[:-1].copy()
 
 class SumoStrategy:
 
