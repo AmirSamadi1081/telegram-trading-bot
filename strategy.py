@@ -10,13 +10,6 @@ from indicators import (
 )
 
 
-def last_closed(df):
-    """
-    آخرین کندل در حال تشکیل را حذف می‌کند
-    """
-    return df.iloc[:-1].copy()
-
-
 class SumoStrategy:
 
     def __init__(
@@ -26,7 +19,6 @@ class SumoStrategy:
         dmo_length=14,
         threshold=0.3
     ):
-
         self.swing_length = swing_length
         self.slope_mult = slope_mult
         self.dmo_length = dmo_length
@@ -45,7 +37,7 @@ class SumoStrategy:
         return btc_df["close"].iloc[-1] > ema50.iloc[-1]
 
     # =====================================================
-    # Trendline Breakout
+    # Trendline Breakout Logic
     # =====================================================
     def trendline_breakout(self, df):
 
@@ -70,61 +62,35 @@ class SumoStrategy:
         upper = np.nan
         lower = np.nan
 
-        upper_series = []
-        lower_series = []
+        upper_break = False
+        lower_break = False
 
         for i in range(len(df)):
 
             if not np.isnan(ph.iloc[i]):
                 upper = ph.iloc[i]
+
             elif not np.isnan(upper):
                 upper -= slope.iloc[i]
 
             if not np.isnan(pl.iloc[i]):
                 lower = pl.iloc[i]
+
             elif not np.isnan(lower):
                 lower += slope.iloc[i]
 
-            upper_series.append(upper)
-            lower_series.append(lower)
+            if not np.isnan(upper):
+                if df["close"].iloc[i] > upper:
+                    upper_break = True
 
-        upper_series = pd.Series(
-            upper_series,
-            index=df.index
-        )
-
-        lower_series = pd.Series(
-            lower_series,
-            index=df.index
-        )
-
-        if len(df) < 2:
-            return False, False
-
-        upper_break = (
-            not np.isnan(upper_series.iloc[-2])
-            and
-            not np.isnan(upper_series.iloc[-1])
-            and
-            df["close"].iloc[-2] <= upper_series.iloc[-2]
-            and
-            df["close"].iloc[-1] > upper_series.iloc[-1]
-        )
-
-        lower_break = (
-            not np.isnan(lower_series.iloc[-2])
-            and
-            not np.isnan(lower_series.iloc[-1])
-            and
-            df["close"].iloc[-2] >= lower_series.iloc[-2]
-            and
-            df["close"].iloc[-1] < lower_series.iloc[-1]
-        )
+            if not np.isnan(lower):
+                if df["close"].iloc[i] < lower:
+                    lower_break = True
 
         return upper_break, lower_break
 
     # =====================================================
-    # DMO Momentum
+    # DMO Filter
     # =====================================================
     def momentum_filter(self, df):
 
@@ -146,14 +112,14 @@ class SumoStrategy:
     # =====================================================
     # Main Signal
     # =====================================================
-   def generate_signal(
-    self,
-    df,
-    btc_df=None
-):
+    def generate_signal(
+        self,
+        df,
+        btc_df=None
+    ):
 
-    if len(df) < 100:
-        return None
+        if len(df) < 100:
+            return None
 
         upper_break, lower_break = self.trendline_breakout(df)
 
