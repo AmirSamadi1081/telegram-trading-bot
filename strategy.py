@@ -39,55 +39,63 @@ class SumoStrategy:
     # =====================================================
     # Trendline Breakout Logic
     # =====================================================
-    def trendline_breakout(self, df):
+   def trendline_breakout(self, df):
 
-        ph = pivot_high(
-            df["high"],
-            self.swing_length,
-            self.swing_length
-        )
+    ph = pivot_high(
+        df["high"],
+        self.swing_length,
+        self.swing_length
+    )
 
-        pl = pivot_low(
-            df["low"],
-            self.swing_length,
-            self.swing_length
-        )
+    pl = pivot_low(
+        df["low"],
+        self.swing_length,
+        self.swing_length
+    )
 
-        slope = trendline_slope(
-            df,
-            self.swing_length,
-            self.slope_mult
-        )
+    slope = trendline_slope(
+        df,
+        self.swing_length,
+        self.slope_mult
+    )
 
-        upper = np.nan
-        lower = np.nan
+    upper = np.nan
+    lower = np.nan
 
-        upper_break = False
-        lower_break = False
+    upper_series = []
+    lower_series = []
 
-        for i in range(len(df)):
+    for i in range(len(df)):
 
-            if not np.isnan(ph.iloc[i]):
-                upper = ph.iloc[i]
+        if not np.isnan(ph.iloc[i]):
+            upper = ph.iloc[i]
+        elif not np.isnan(upper):
+            upper -= slope.iloc[i]
 
-            elif not np.isnan(upper):
-                upper -= slope.iloc[i]
+        if not np.isnan(pl.iloc[i]):
+            lower = pl.iloc[i]
+        elif not np.isnan(lower):
+            lower += slope.iloc[i]
 
-            if not np.isnan(pl.iloc[i]):
-                lower = pl.iloc[i]
+        upper_series.append(upper)
+        lower_series.append(lower)
 
-            elif not np.isnan(lower):
-                lower += slope.iloc[i]
+    upper_series = pd.Series(upper_series, index=df.index)
+    lower_series = pd.Series(lower_series, index=df.index)
 
-            if not np.isnan(upper):
-                if df["close"].iloc[i] > upper:
-                    upper_break = True
+    upper_break = (
+        df["close"].iloc[-2] <= upper_series.iloc[-2]
+        and
+        df["close"].iloc[-1] > upper_series.iloc[-1]
+    )
 
-            if not np.isnan(lower):
-                if df["close"].iloc[i] < lower:
-                    lower_break = True
+    lower_break = (
+        df["close"].iloc[-2] >= lower_series.iloc[-2]
+        and
+        df["close"].iloc[-1] < lower_series.iloc[-1]
+    )
 
-        return upper_break, lower_break
+    return upper_break, lower_break
 
     # =====================================================
     # DMO Filter
