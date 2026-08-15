@@ -51,4 +51,4 @@ SYMBOLS = [
 # Scanner
 # ==============================
 SCAN_INTERVAL = 60        # seconds
-KLINE_LIMIT = 500         # candles
+KLINE_LIMIT = 200         # candles
