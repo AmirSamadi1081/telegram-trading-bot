@@ -30,7 +30,7 @@ def scan_symbol(symbol, timeframe):
 
 
 def run_scanner():
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = []
 
         for symbol in SYMBOLS:
