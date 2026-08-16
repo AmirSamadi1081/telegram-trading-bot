@@ -61,3 +61,13 @@ class TelegramSender:
         except Exception as e:
             print(f"Telegram Error: {e}")
             return False
+
+if __name__ == "__main__":
+    telegram = TelegramSender()
+
+    telegram.send_signal(
+        symbol="TESTUSDT",
+        timeframe="5m",
+        signal="BUY",
+        price=123.45
+    )
