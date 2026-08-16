@@ -4,8 +4,8 @@ import os
 # Telegram
 # =====================================================
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TOKEN = os.environ.get("8865723060:AAFjs7IkbZjw1xqCK8uqWUYKwkS95cBt8Rs")
+CHAT_ID = os.environ.get("7333396434")
 
 
 # =====================================================
