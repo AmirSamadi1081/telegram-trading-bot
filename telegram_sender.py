@@ -14,7 +14,6 @@ class TelegramSender:
         signal,
         price
     ):
-
         emoji = "🟢" if signal == "BUY" else "🔴"
 
         text = (
@@ -26,7 +25,6 @@ class TelegramSender:
         )
 
         try:
-
             response = requests.post(
                 self.url,
                 data={
@@ -37,45 +35,29 @@ class TelegramSender:
             )
 
             print(
-                f"Telegram response: "
-                f"{response.status_code} -> {response.text}"
+                f"Telegram HTTP {response.status_code} "
+                f"-> {response.text}"
             )
 
-            if response.status_code != 200:
-                print(
-                    f"Telegram HTTP Error: "
-                    f"{response.status_code}"
-                )
-                return False
+            data = response.json()
 
-            result = response.json()
-
-            if not result.get("ok"):
+            if data.get("ok") is True:
                 print(
-                    f"Telegram API Error: "
-                    f"{result}"
+                    f"TELEGRAM SENT -> "
+                    f"{symbol} {timeframe} {signal}"
                 )
-                return False
+                return True
 
             print(
-                f"Telegram signal sent successfully: "
-                f"{symbol} {timeframe} {signal}"
+                f"TELEGRAM ERROR -> "
+                f"{data.get('description')}"
             )
-
-            return True
+            return False
 
         except requests.RequestException as e:
-
-            print(
-                f"Telegram Connection Error: {e}"
-            )
-
+            print(f"Telegram Connection Error: {e}")
             return False
 
         except Exception as e:
-
-            print(
-                f"Telegram Error: {e}"
-            )
-
+            print(f"Telegram Error: {e}")
             return False
