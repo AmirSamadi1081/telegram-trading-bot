@@ -1,5 +1,6 @@
 import os
 
+
 # =====================================================
 # Telegram
 # =====================================================
@@ -8,11 +9,15 @@ TOKEN = os.environ.get("8865723060:AAFjs7IkbZjw1xqCK8uqWUYKwkS95cBt8Rs")
 CHAT_ID = os.environ.get("7333396434")
 
 
-# =====================================================
-# OKX
-# =====================================================
+if not TOKEN:
+    raise RuntimeError(
+        "TELEGRAM_TOKEN environment variable is missing."
+    )
 
-BASE_URL = "https://www.okx.com"
+if not CHAT_ID:
+    raise RuntimeError(
+        "TELEGRAM_CHAT_ID environment variable is missing."
+    )
 
 
 # =====================================================
@@ -59,4 +64,5 @@ SYMBOLS = [
 # =====================================================
 
 SCAN_INTERVAL = 180
+
 KLINE_LIMIT = 200
