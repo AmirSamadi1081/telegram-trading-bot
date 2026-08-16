@@ -1,3 +1,4 @@
+import time
 import requests
 import pandas as pd
 
@@ -10,38 +11,152 @@ BAR_MAP = {
     "4h": "4H"
 }
 
-def get_klines(symbol="BTCUSDT", interval="15m", limit=300):
-    inst_id = symbol.replace("USDT", "-USDT-SWAP")
+# -----------------------------------------------------
+# تبدیل نماد
+# -----------------------------------------------------
+
+def get_inst_id(symbol):
+    return symbol.replace("USDT", "-USDT-SWAP")
+
+
+# -----------------------------------------------------
+# دریافت کندل‌ها از OKX
+# -----------------------------------------------------
+
+def get_klines(symbol="BTCUSDT", interval="15m", limit=200):
+
+    if interval not in BAR_MAP:
+        raise ValueError(f"Unsupported timeframe: {interval}")
+
+    inst_id = get_inst_id(symbol)
     bar = BAR_MAP[interval]
 
     url = f"{BASE_URL}/api/v5/market/candles"
+
     params = {
         "instId": inst_id,
         "bar": bar,
-        "limit": limit
+        "limit": min(int(limit), 200)
     }
 
-    r = requests.get(url, params=params, timeout=20)
-    r.raise_for_status()
+    # -------------------------------------------------
+    # تلاش مجدد برای خطای 429
+    # -------------------------------------------------
 
-    data = r.json()
+    max_retries = 4
 
-    if data.get("code") != "0":
-        raise Exception(f"OKX API Error: {data.get('msg')}")
+    for attempt in range(max_retries):
 
-    candles = data["data"]
+        try:
 
-    df = pd.DataFrame(candles, columns=[
-        "open_time", "open", "high", "low", "close",
-        "volume", "volCcy", "volCcyQuote", "confirm"
-    ])
+            response = requests.get(
+                url,
+                params=params,
+                timeout=20
+            )
 
-    df[["open", "high", "low", "close", "volume"]] = (
-        df[["open", "high", "low", "close", "volume"]].astype(float)
+            # Rate Limit
+            if response.status_code == 429:
+
+                wait_time = 2 ** attempt
+
+                print(
+                    f"OKX rate limit: "
+                    f"{symbol} {interval} "
+                    f"-> retry in {wait_time}s"
+                )
+
+                time.sleep(wait_time)
+                continue
+
+            response.raise_for_status()
+
+            data = response.json()
+
+            if data.get("code") != "0":
+                raise Exception(
+                    f"OKX API Error: {data.get('msg')}"
+                )
+
+            candles = data.get("data", [])
+
+            if not candles:
+                raise Exception(
+                    f"No candle data for {symbol} {interval}"
+                )
+
+            # -------------------------------------------------
+            # تبدیل DataFrame
+            # -------------------------------------------------
+
+            df = pd.DataFrame(
+                candles,
+                columns=[
+                    "open_time",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                    "volCcy",
+                    "volCcyQuote",
+                    "confirm"
+                ]
+            )
+
+            numeric_columns = [
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume"
+            ]
+
+            df[numeric_columns] = (
+                df[numeric_columns]
+                .apply(pd.to_numeric, errors="coerce")
+            )
+
+            df["open_time"] = pd.to_datetime(
+                df["open_time"].astype("int64"),
+                unit="ms"
+            )
+
+            # OKX داده‌ها را از جدید به قدیم می‌دهد
+            # ما آن را به قدیم -> جدید تبدیل می‌کنیم
+
+            df = (
+                df.iloc[::-1]
+                .reset_index(drop=True)
+            )
+
+            # حذف داده‌های خراب
+            df = df.dropna(
+                subset=[
+                    "open",
+                    "high",
+                    "low",
+                    "close"
+                ]
+            ).reset_index(drop=True)
+
+            return df
+
+        except requests.RequestException as e:
+
+            if attempt == max_retries - 1:
+                raise
+
+            wait_time = 2 ** attempt
+
+            print(
+                f"Request error "
+                f"{symbol} {interval}: {e} "
+                f"-> retry in {wait_time}s"
+            )
+
+            time.sleep(wait_time)
+
+    raise Exception(
+        f"Failed to fetch {symbol} {interval}"
     )
-
-    df["open_time"] = pd.to_datetime(df["open_time"].astype("int64"), unit="ms")
-
-    df = df.iloc[::-1].reset_index(drop=True)
-
-    return df
